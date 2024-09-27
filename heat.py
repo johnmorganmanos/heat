@@ -68,13 +68,19 @@ def heat(t_surf,
             k_profile = ice_conductivity(U[:,k])
         else:
             # ice diffusivity profile
-            k_profile = np.array([k_0]*(nz+1))
+#             k_profile = ice_conductivity(U[:,0]) #Test fixed
+            k_profile = np.array([k_0]*(nz+1)) #Original fixed (working)
+        
+
             
         alpha = (k_profile / (ρ_ice * c_p)) * spy
         
+
+        
         # cfl is now time dependent (diffusivity is coupled to temperature)
-        cfl = alpha*dt/(dz**2)
-        Azz = np.diag(1+2*cfl) + np.diag(-cfl[:-1],k=1)\
+        cfl = alpha*dt/(dz**2) ## Original
+
+        Azz = np.diag(1+2*cfl) + np.diag(-cfl[1:],k=1)\
         + np.diag(-cfl[:-1],k=-1)
         
         A = Azz - Az
@@ -86,7 +92,7 @@ def heat(t_surf,
         A[nz,nz-1] = -2*cfl[nz]
         b[nz] =  2*cfl[nz]*dz * dTdz
 
-        
+
         b[0] = cfl[0]*t_surf[k]    #  Dirichlet boundary condition
 
         c = U[:,k] + b.flatten() + S[:,k+1]*dt # previous values + dirichlet + sources
