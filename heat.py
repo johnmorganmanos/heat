@@ -2,6 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import detrend
 
+def ice_conductivity(temp):
+    ''' Temperature dependent conductivity '''
+    return 9.828*np.exp(-0.0057*(273.15 + temp))
+
 def heat(t_surf,
          tmax = 1000,
          tmin = 0,
@@ -9,7 +13,6 @@ def heat(t_surf,
          dTdz = 0.02,
          nz = 39,
          nt = 99,
-         alpha = 35,
          accumulation = 0,
          S = np.nan 
         ):
@@ -17,6 +20,9 @@ def heat(t_surf,
     '''
     Solves the advection/diffusion equation with mixed temperature/heat flux boundary conditions
     '''
+    ρ_ice = 917. # kg/m3
+    c_p = 2097.
+    spy = 3.154e7
     
     if np.isnan(S).any():
         S = np.zeros((nz+1,nt+1))
@@ -26,10 +32,17 @@ def heat(t_surf,
     dt = (tmax-tmin)/nt
     t = np.linspace(tmin,tmax, nt+1)
     z = np.linspace(dz,zmax, nz+1)
-
+    
+    # Initial condition: gradient equal to basal gradient and equal to surface temp.
+    U = np.zeros((nz+1,nt+1))
+    U[:,0] = t_surf[0] + z*dTdz
+    
+    # Initial ice diffusivity profile
+    alpha = (ice_conductivity(U[:,0]) / (ρ_ice * c_p)) * spy
+    
     cfl = alpha*dt/(dz**2)
-    Azz = np.diag([1+2*cfl] * (nz+1)) + np.diag([-cfl] * (nz),k=1)\
-        + np.diag([-cfl] * (nz),k=-1)
+    Azz = np.diag(1+2*cfl) + np.diag(-cfl[:-1],k=1)\
+        + np.diag(-cfl[:-1],k=-1)
 
 #     w = - accumulation * np.ones(nz) # WRONG!
     w = - accumulation * np.linspace(0,1,nz) # CORRECT!
@@ -41,16 +54,14 @@ def heat(t_surf,
 
 
     # Neumann boundary condition
-    A[nz,nz-1] = -2*cfl
+    A[nz,nz-1] = -2*cfl[nz]
     b= np.zeros((nz+1,1))
-    b[nz] =  2*cfl*dz * dTdz
+    b[nz] =  2*cfl[nz]*dz * dTdz
 
-    # Initial condition: gradient equal to basal gradient and equal to surface temp.
-    U = np.zeros((nz+1,nt+1))
-    U[:,0] = t_surf[0] + z*dTdz
+
 
     for k in range(nt):
-        b[0] = cfl*t_surf[k]    #  Dirichlet boundary condition
+        b[0] = cfl[0]*t_surf[k]    #  Dirichlet boundary condition
 
         c = U[:,k] + b.flatten() + S[:,k+1]*dt # previous values + dirichlet + sources
         U[:,k+1] = np.linalg.solve(A,c)
