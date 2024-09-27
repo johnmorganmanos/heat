@@ -10,7 +10,7 @@ def heat(t_surf,
          tmax = 1000,
          tmin = 0,
          zmax = 100,
-         dTdz = 0.02,
+         geoflux = 0.046,
          nz = 39,
          nt = 99,
          accumulation = 0,
@@ -23,6 +23,9 @@ def heat(t_surf,
     ρ_ice = 917. # kg/m3
     c_p = 2097.
     spy = 3.154e7
+    k_0 = 2.22 #initial conductivity to use for the dTdz calc
+    
+    dTdz_init = geoflux / k_0
     
     if np.isnan(S).any():
         S = np.zeros((nz+1,nt+1))
@@ -35,14 +38,9 @@ def heat(t_surf,
     
     # Initial condition: gradient equal to basal gradient and equal to surface temp.
     U = np.zeros((nz+1,nt+1))
-    U[:,0] = t_surf[0] + z*dTdz
+    U[:,0] = t_surf[0] + z*dTdz_init
     
-    # Initial ice diffusivity profile
-    alpha = (ice_conductivity(U[:,0]) / (ρ_ice * c_p)) * spy
-    
-    cfl = alpha*dt/(dz**2)
-    Azz = np.diag(1+2*cfl) + np.diag(-cfl[:-1],k=1)\
-        + np.diag(-cfl[:-1],k=-1)
+
 
 #     w = - accumulation * np.ones(nz) # WRONG!
     w = - accumulation * np.linspace(0,1,nz) # CORRECT!
@@ -50,17 +48,34 @@ def heat(t_surf,
     Az = np.diag(abc,k=1) - np.diag(abc,k=-1)
     Az[0,:] =0
     Az[-1,:]=0
-    A = Azz - Az
 
 
-    # Neumann boundary condition
-    A[nz,nz-1] = -2*cfl[nz]
+    
     b= np.zeros((nz+1,1))
-    b[nz] =  2*cfl[nz]*dz * dTdz
+
 
 
 
     for k in range(nt):
+        # ice diffusivity profile
+        k_profile = ice_conductivity(U[:,k])
+        alpha = (k_profile / (ρ_ice * c_p)) * spy
+        
+        # cfl is now time dependent (diffusivity is coupled to temperature)
+        cfl = alpha*dt/(dz**2)
+        Azz = np.diag(1+2*cfl) + np.diag(-cfl[:-1],k=1)\
+        + np.diag(-cfl[:-1],k=-1)
+        
+        A = Azz - Az
+        
+        # calculate dTdz at the bed
+        dTdz = geoflux / k_profile[-1]
+        
+        # Neumann boundary at the bed
+        A[nz,nz-1] = -2*cfl[nz]
+        b[nz] =  2*cfl[nz]*dz * dTdz
+
+        
         b[0] = cfl[0]*t_surf[k]    #  Dirichlet boundary condition
 
         c = U[:,k] + b.flatten() + S[:,k+1]*dt # previous values + dirichlet + sources
