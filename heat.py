@@ -3,7 +3,12 @@ import matplotlib.pyplot as plt
 from scipy.signal import detrend
 
 def ice_conductivity(temp):
-    ''' Temperature dependent conductivity '''
+    ''' 
+    Temperature dependent conductivity 
+    
+    Equation from Cuffey and Paterson, 2010, pg. 400
+    '''
+    
     return 9.828*np.exp(-0.0057*(273.15 + temp))
 
 def heat(t_surf,
@@ -14,7 +19,8 @@ def heat(t_surf,
          nz = 39,
          nt = 99,
          accumulation = 0,
-         S = np.nan 
+         S = np.nan,
+         variable_conductivity=False
         ):
     
     '''
@@ -57,8 +63,13 @@ def heat(t_surf,
 
 
     for k in range(nt):
-        # ice diffusivity profile
-        k_profile = ice_conductivity(U[:,k])
+        if variable_conductivity == True:
+            # ice diffusivity profile
+            k_profile = ice_conductivity(U[:,k])
+        else:
+            # ice diffusivity profile
+            k_profile = np.array([k_0]*(nz+1))
+            
         alpha = (k_profile / (ρ_ice * c_p)) * spy
         
         # cfl is now time dependent (diffusivity is coupled to temperature)
